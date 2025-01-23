@@ -22,15 +22,17 @@ def parse_catalog(catalog):
     return parsed
 
 
-def export_sessions(catalog, audio_path, out_path):
+def export_sessions(catalog, audio_path, out_path, pass_missing=False):
     out_path.mkdir(exist_ok=True, parents=True)
     for audio_file, sessions in catalog.items():
         print(audio_file)
         af = audio_path / f'{audio_file}.mp3'
         if not af.is_file():
-            print('not parsing', af)
-            continue
-            # raise FileExistsError(af)
+            if pass_missing:
+                print('not parsing', af)
+                continue
+            else:
+                raise FileExistsError(af)
 
         audio = AudioSegment.from_file(af)
         for s in sessions:
@@ -40,6 +42,6 @@ def export_sessions(catalog, audio_path, out_path):
             session.export(out_file, format="mp3")
 
 
-def export_teachings(catalog, audio_path, out_path):
+def export_teachings(catalog, audio_path, out_path, pass_missing=False):
     catalog = parse_catalog(catalog)
     export_sessions(catalog, audio_path, out_path)
