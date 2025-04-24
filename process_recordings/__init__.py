@@ -1,1 +1,1 @@
-from .chunk_recordings import export_teachings
+from .chunk_recordings import export_teachings, export_final_files
