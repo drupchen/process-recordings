@@ -5,7 +5,7 @@ from process_recordings import export_teachings, export_final_files
 
 # modes:
 # 1: export individual sessions from the cassette sides + resegment sessions when needed
-# 2: when everything is aligned, export final sessions + .srt files for hyperaudio with final filenames
+# 2: when everything is aligned, export final sessions + .srt files for hyperaudio with final filenames + tibetan session title
 mode = 2
 
 if mode == 1:
