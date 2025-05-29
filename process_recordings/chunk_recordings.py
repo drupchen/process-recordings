@@ -77,11 +77,14 @@ def parse_catalog(catalog):
 def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_file='', final_filename=False):
     out_path.mkdir(exist_ok=True, parents=True)
     for audio_file, sessions in catalog.items():
+        if single_file and single_file != audio_file:
+            continue
+
         print(audio_file)
         if '0' in sessions:
-            af = audio_path / sessions['0'][0][1]['filename']
+            af = audio_path / sessions['0'][0][1]['Folder'] / sessions['0'][0][1]['filename']
         elif '1' in sessions:
-            af = audio_path / sessions['1'][0][1]['filename']
+            af = audio_path / sessions['1'][0][1]['Folder'] / sessions['1'][0][1]['filename']
         else:
             print('This should not happen. each session should either start with 0 or 1. Exiting')
             exit(0)

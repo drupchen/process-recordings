@@ -14,9 +14,9 @@ if mode == 1:
     filename = "input/audio archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
-    audio_path = Path('/media/drupchen/Khyentse Önang/Khyentse Önang/Processing')
+    audio_path = Path('/media/drupchen/Khyentse Önang/DSM/Original Files')
     out_path = Path('output/Raw Sessions')
-    cassette_side_to_resegment = ''
+    cassette_side_to_resegment = '111 A-Dzogchen Lamrim Yigdrupa'
     export_teachings(Path(filename), audio_path, out_path, pass_missing=True, single_file=cassette_side_to_resegment)
 
 elif mode == 2:
