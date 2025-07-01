@@ -5,6 +5,7 @@ from pathlib import Path
 from shutil import copy
 
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 
 
 def parse_catalog(catalog):
@@ -18,6 +19,7 @@ def parse_catalog(catalog):
         cat = csv.DictReader(csvfile, delimiter='\t', quotechar='|')
         for row in cat:
             file = row['filename'][:row['filename'].rfind('.')]
+            file = f"{row['Folder']}/{file}"
             if row['start']:
                 row['start'] = to_milliseconds(time.fromisoformat(row['start']))
             else:
@@ -33,11 +35,19 @@ def parse_catalog(catalog):
             parsed[file].append(row)
 
     # group in teaching sessions
+    def is_processed(parts):
+        for p in parts:
+            if p[S]:
+                return True
+            if p[S_T]:
+                return True
+        return False
+
     processed_in_sessions = {}
     S, S_T = 'session number', 'translation session number'
     for filename, parts in parsed.items():
         # filter out all unprocessed files
-        if not parts[0][S] and not parts[0][S_T]:
+        if not is_processed(parts):
             continue
 
         sessions = {}
@@ -80,11 +90,14 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
         if single_file and single_file != audio_file:
             continue
 
-        print(audio_file)
         if '0' in sessions:
-            af = audio_path / sessions['0'][0][1]['Folder'] / sessions['0'][0][1]['filename']
+            folder = sessions['0'][0][1]['Folder']
+            filename = sessions['0'][0][1]['filename']
+            af = audio_path / folder / filename
         elif '1' in sessions:
-            af = audio_path / sessions['1'][0][1]['Folder'] / sessions['1'][0][1]['filename']
+            folder = sessions['1'][0][1]['Folder']
+            filename = sessions['1'][0][1]['filename']
+            af = audio_path / folder / filename
         else:
             print('This should not happen. each session should either start with 0 or 1. Exiting')
             exit(0)
@@ -95,23 +108,50 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             else:
                 raise FileExistsError(af)
 
-        audio = AudioSegment.from_file(af)
+        # bypass all the files that are already processed
+        # this means that when some files need to be reprocessed, the whole folder in Raw Sessions should be deleted
+        p = out_path / folder / audio_file
+        if p.is_dir():
+            print(f'\tpassing "{folder}/{filename}"')
+            continue
+
+        print(f'"{folder}/{filename}"')
+
+        try:
+            audio = AudioSegment.from_file(af)
+        except CouldntDecodeError:
+            # if WAV subtype is MS_ADPCM (from Windows 3.1), save it as PCM_16
+            # from https://stackoverflow.com/a/44813025
+            new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
+            if not new_af.is_file():
+                import soundfile as sf
+                data, samplerate = sf.read(af)
+                new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
+                sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
+
+            audio = AudioSegment.from_file(new_af)
         for s_name, s in sessions.items():
             if final_filename:
                 filename = s[0][1]['export filename']
             else:
                 ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.')+1:]
                 filename = f'{audio_file}_{s_name}.{ext}'
-            print('\t', filename)
 
+            # out_folder = out_path / s[0][1]['Folder'] / audio_file
+            # out_folder.mkdir(parents=True, exist_ok=True)
+            out_file = out_path / filename
+            # change extension to "wav" as export format is wav, even when input is mp3
+            out_file = out_file.parent / (out_file.stem + ".wav")
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+
+            print('\t', out_file.name)
             session_audio = AudioSegment.empty()
             for part_num, part in s:
                 start, duration = part['start'], part['duration']
                 audio_part = audio[start:start+duration]
                 session_audio += audio_part
-            out_folder = out_path / part['Folder'] / audio_file
-            out_folder.mkdir(parents=True, exist_ok=True)
-            out_file = out_folder / filename
+            if out_file.is_file():
+               continue
             session_audio.export(out_file, format="wav")
 
 

@@ -11,18 +11,20 @@ mode = 1
 if mode == 1:
     # download from Google Drive
     catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5UhciIy-L82-xPJJ5TmpNS-Hizae9ot_2fuvbl2cPQvuBwwRYfpYSSQkeSletINUeaq3UILKlP0gA/pub?gid=2043758745&single=true&output=tsv'
-    filename = "input/audio archives - sessions.tsv"
+    filename = "input/audio $archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
     audio_path = Path('/media/drupchen/Khyentse Önang/DSM/Original Files')
-    out_path = Path('output/Raw Sessions')
+    out_path = Path('/media/drupchen/Khyentse Önang/DSM/Original Files in Sessions')
     cassette_side_to_resegment = '111 A-Dzogchen Lamrim Yigdrupa'
+    cassette_side_to_resegment = ''
     export_teachings(Path(filename), audio_path, out_path, pass_missing=True, single_file=cassette_side_to_resegment)
 
 elif mode == 2:
     # download from Google Drive
     catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGZJWL9nTtAurpNBs3AVK7UHELhEW41I3t1u9NZHU8xDxPKHTz9Qml1W_jVJ4vpyQzZxDDLv6Q2pq2/pub?gid=708229619&single=true&output=tsv'
     filename = "input/tsiksum nedek catalog - final catalog.tsv"
+    filename = ''
     urlretrieve(catalog_url, filename)
 
     mp3_path = 'output/tsiksum nedek/'
