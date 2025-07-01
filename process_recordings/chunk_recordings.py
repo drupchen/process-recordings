@@ -108,28 +108,9 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             else:
                 raise FileExistsError(af)
 
-        # bypass all the files that are already processed
-        # this means that when some files need to be reprocessed, the whole folder in Raw Sessions should be deleted
-        p = out_path / folder / audio_file
-        if p.is_dir():
-            print(f'\tpassing "{folder}/{filename}"')
-            continue
-
         print(f'"{folder}/{filename}"')
 
-        try:
-            audio = AudioSegment.from_file(af)
-        except CouldntDecodeError:
-            # if WAV subtype is MS_ADPCM (from Windows 3.1), save it as PCM_16
-            # from https://stackoverflow.com/a/44813025
-            new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
-            if not new_af.is_file():
-                import soundfile as sf
-                data, samplerate = sf.read(af)
-                new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
-                sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
-
-            audio = AudioSegment.from_file(new_af)
+        audio = None
         for s_name, s in sessions.items():
             if final_filename:
                 filename = s[0][1]['export filename']
@@ -141,19 +122,33 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             # out_folder.mkdir(parents=True, exist_ok=True)
             out_file = out_path / filename
             # change extension to "wav" as export format is wav, even when input is mp3
-            out_file = out_file.parent / (out_file.stem + ".wav")
+            out_file = out_file.parent / audio_file[audio_file.rfind('/')+1:] / (out_file.stem + ".wav")
             out_file.parent.mkdir(parents=True, exist_ok=True)
 
+            if out_file.is_file():
+               continue
             print('\t', out_file.name)
+
+            if not audio:
+                try:
+                    audio = AudioSegment.from_file(af)
+                except CouldntDecodeError:
+                    # if WAV subtype is MS_ADPCM (from Windows 3.1), save it as PCM_16
+                    # from https://stackoverflow.com/a/44813025
+                    new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
+                    if not new_af.is_file():
+                        import soundfile as sf
+                        data, samplerate = sf.read(af)
+                        new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
+                        sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
+
+                    audio = AudioSegment.from_file(new_af)
             session_audio = AudioSegment.empty()
             for part_num, part in s:
                 start, duration = part['start'], part['duration']
                 audio_part = audio[start:start+duration]
                 session_audio += audio_part
-            if out_file.is_file():
-               continue
             session_audio.export(out_file, format="wav")
-
 
 def export_teachings(catalog, audio_path, out_path, pass_missing=False, single_file=''):
     catalog, catalog_sessions = parse_catalog(catalog)
