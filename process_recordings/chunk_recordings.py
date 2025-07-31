@@ -100,6 +100,7 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             af = audio_path / folder / filename
         else:
             print('This should not happen. each session should either start with 0 or 1. Exiting')
+            print(sessions)
             exit(0)
         if not af.is_file():
             if pass_missing:
@@ -146,6 +147,10 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             session_audio = AudioSegment.empty()
             for part_num, part in s:
                 start, duration = part['start'], part['duration']
+                if not duration:
+                    print("This file doesn't have timecodes. please retrieve them.")
+                    print(part)
+                    exit(1)
                 audio_part = audio[start:start+duration]
                 session_audio += audio_part
             session_audio.export(out_file, format="wav")

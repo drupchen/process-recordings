@@ -8,8 +8,8 @@ def list_4_dashboard(in_path, out_path):
     folders = sorted(folders)
     files = []
     for f in folders:
-        parts = f.parts[-1], '/'.join(f.parts[2:-1])
-        if '@' in parts[1]:
+        parts = f.parts[-1], '/'.join(f.parts[3:-1])
+        if '@eaDir' in parts[1]:
             continue
         files.append(parts)
 
