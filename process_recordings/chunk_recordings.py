@@ -3,6 +3,8 @@ from datetime import time
 from collections import defaultdict
 from pathlib import Path
 from shutil import copy
+import concurrent.futures
+from functools import partial
 
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
@@ -109,7 +111,7 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             else:
                 raise FileExistsError(af)
 
-        print(f'"{folder}/{filename}"')
+        #print(f'"{folder}/{filename}"')
 
         audio = None
         for s_name, s in sessions.items():
@@ -125,6 +127,7 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
             # change extension to "wav" as export format is wav, even when input is mp3
             out_file = out_file.parent / audio_file[audio_file.rfind('/')+1:] / (out_file.stem + ".wav")
             out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file_m4a = out_file.with_suffix('.m4a')
 
             if out_file.is_file():
                continue
@@ -154,6 +157,7 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
                 audio_part = audio[start:start+duration]
                 session_audio += audio_part
             session_audio.export(out_file, format="wav")
+            session_audio.export(out_file_m4a, format="ipod")
 
 def export_teachings(catalog, audio_path, out_path, pass_missing=False, single_file=''):
     catalog, catalog_sessions = parse_catalog(catalog)
