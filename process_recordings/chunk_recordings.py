@@ -86,83 +86,192 @@ def parse_catalog(catalog):
     return parsed, processed_in_sessions
 
 
-def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_file='', final_filename=False):
-    out_path.mkdir(exist_ok=True, parents=True)
-    for audio_file, sessions in catalog.items():
-        if single_file and single_file != audio_file:
-            continue
+def load_audio_file(audio_path, folder, filename, pass_missing):
+    """Load audio file with error handling"""
+    af = audio_path / folder / filename
 
+    if not af.is_file():
+        if pass_missing:
+            return None, f'File missing: {af}'
+        else:
+            raise FileExistsError(af)
+
+    try:
+        audio = AudioSegment.from_file(af)
+        return audio, None
+    except CouldntDecodeError:
+        # Handle MS_ADPCM files
+        new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
+        if not new_af.is_file():
+            import soundfile as sf
+            data, samplerate = sf.read(af)
+            sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
+        audio = AudioSegment.from_file(new_af)
+        return audio, None
+
+
+def export_single_session(task, audio_cache):
+    """Export a single session"""
+    audio_file, s_name, s, out_path, final_filename = task
+
+    if audio_file not in audio_cache:
+        return f"Skipped {audio_file} - audio not loaded"
+
+    audio = audio_cache[audio_file]
+
+    # Prepare output paths
+    if final_filename:
+        filename = s[0][1]['export filename']
+    else:
+        ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
+        filename = f'{audio_file}_{s_name}.{ext}'
+
+    out_file = out_path / filename
+    out_file = out_file.parent / audio_file[audio_file.rfind('/') + 1:] / (out_file.stem + ".wav")
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file_m4a = out_file.with_suffix('.m4a')
+
+    # Skip if both exist
+    if out_file.is_file() and out_file_m4a.is_file():
+        return None  # Silent skip
+
+    # Build session audio
+    session_audio = AudioSegment.empty()
+    for part_num, part in s:
+        start, duration = part['start'], part['duration']
+        if not duration:
+            return f"Error: Missing timecodes for {out_file.name}"
+        audio_part = audio[start:start + duration]
+        session_audio += audio_part
+
+    # Export both formats
+    try:
+        if not out_file.is_file():
+            session_audio.export(out_file, format="wav")
+        if not out_file_m4a.is_file():
+            session_audio.export(out_file_m4a, format="ipod",
+                                 bitrate="256k",
+                                 parameters=["-q:a", "2"])
+        return f"Exported: {out_file.stem}"
+    except Exception as e:
+        return f"Error exporting {out_file.name}: {str(e)}"
+
+
+def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename, max_workers):
+    """Process a batch of audio files"""
+    batch_catalog, batch_num, total_batches = batch_info
+
+    print(f"\n{'=' * 60}")
+    print(f"Processing batch {batch_num}/{total_batches} ({len(batch_catalog)} audio files)")
+    print(f"{'=' * 60}")
+
+    # Step 1: Load all audio files in this batch
+    audio_cache = {}
+    audio_info = {}
+
+    # Collect audio file information
+    for audio_file, sessions in batch_catalog.items():
         if '0' in sessions:
             folder = sessions['0'][0][1]['Folder']
             filename = sessions['0'][0][1]['filename']
-            af = audio_path / folder / filename
         elif '1' in sessions:
             folder = sessions['1'][0][1]['Folder']
             filename = sessions['1'][0][1]['filename']
-            af = audio_path / folder / filename
         else:
-            print('This should not happen. each session should either start with 0 or 1. Exiting')
-            print(sessions)
-            exit(0)
-        if not af.is_file():
-            if pass_missing:
-                print('not parsing. file missing in input folder:', af)
-                continue
-            else:
-                raise FileExistsError(af)
+            continue
+        audio_info[audio_file] = (folder, filename)
 
-        #print(f'"{folder}/{filename}"')
+    # Load audio files
+    print(f"\nLoading {len(audio_info)} audio files...")
+    for audio_file, (folder, filename) in audio_info.items():
+        audio, error = load_audio_file(audio_path, folder, filename, pass_missing)
+        if audio is not None:
+            audio_cache[audio_file] = audio
+            print(f"  ✓ Loaded: {folder}/{filename}")
+        elif error:
+            print(f"  ✗ {error}")
 
-        audio = None
+    # Step 2: Prepare all export tasks for this batch
+    export_tasks = []
+    for audio_file, sessions in batch_catalog.items():
+        if audio_file not in audio_cache:
+            continue
+
         for s_name, s in sessions.items():
-            if final_filename:
-                filename = s[0][1]['export filename']
-            else:
-                ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.')+1:]
-                filename = f'{audio_file}_{s_name}.{ext}'
+            export_tasks.append((audio_file, s_name, s, out_path, final_filename))
 
-            # out_folder = out_path / s[0][1]['Folder'] / audio_file
-            # out_folder.mkdir(parents=True, exist_ok=True)
-            out_file = out_path / filename
-            # change extension to "wav" as export format is wav, even when input is mp3
-            out_file = out_file.parent / audio_file[audio_file.rfind('/')+1:] / (out_file.stem + ".wav")
-            out_file.parent.mkdir(parents=True, exist_ok=True)
-            out_file_m4a = out_file.with_suffix('.m4a')
+    # Step 3: Process all exports in parallel
+    if export_tasks:
+        print(f"\nExporting {len(export_tasks)} sessions using {max_workers} workers...")
 
-            if out_file.is_file():
-               continue
-            print('\t', out_file.name)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            export_func = partial(export_single_session, audio_cache=audio_cache)
 
-            if not audio:
-                try:
-                    audio = AudioSegment.from_file(af)
-                except CouldntDecodeError:
-                    # if WAV subtype is MS_ADPCM (from Windows 3.1), save it as PCM_16
-                    # from https://stackoverflow.com/a/44813025
-                    new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
-                    if not new_af.is_file():
-                        import soundfile as sf
-                        data, samplerate = sf.read(af)
-                        new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
-                        sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
+            # Submit all tasks
+            future_to_task = {executor.submit(export_func, task): task for task in export_tasks}
 
-                    audio = AudioSegment.from_file(new_af)
-            session_audio = AudioSegment.empty()
-            for part_num, part in s:
-                start, duration = part['start'], part['duration']
-                if not duration:
-                    print("This file doesn't have timecodes. please retrieve them.")
-                    print(part)
-                    exit(1)
-                audio_part = audio[start:start+duration]
-                session_audio += audio_part
-            session_audio.export(out_file, format="wav")
-            session_audio.export(out_file_m4a, format="ipod")
+            completed = 0
+            successful = 0
+            for future in concurrent.futures.as_completed(future_to_task):
+                completed += 1
+                result = future.result()
+                if result and not result.startswith("Skipped"):
+                    print(f"  [{completed}/{len(export_tasks)}] {result}")
+                    if result.startswith("Exported"):
+                        successful += 1
 
-def export_teachings(catalog, audio_path, out_path, pass_missing=False, single_file=''):
+        print(f"\nBatch complete: {successful} files exported")
+
+    # Clear memory
+    audio_cache.clear()
+    return len(export_tasks)
+
+
+def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_file='',
+                    final_filename=False, batch_size=10, max_workers=10):
+    """Export sessions processing files in batches"""
+    out_path.mkdir(exist_ok=True, parents=True)
+
+    # Filter catalog if single_file is specified
+    if single_file:
+        catalog = {k: v for k, v in catalog.items() if k == single_file}
+
+    # Split catalog into batches
+    catalog_items = list(catalog.items())
+    batches = []
+
+    for i in range(0, len(catalog_items), batch_size):
+        batch = dict(catalog_items[i:i + batch_size])
+        batches.append(batch)
+
+    print(f"Total audio files to process: {len(catalog)}")
+    print(f"Batch size: {batch_size}")
+    print(f"Number of batches: {len(batches)}")
+    print(f"Parallel workers per batch: {max_workers}")
+
+    # Process each batch
+    total_exported = 0
+    for batch_num, batch in enumerate(batches, 1):
+        batch_info = (batch, batch_num, len(batches))
+        exported = process_batch(batch_info, audio_path, out_path,
+                                 pass_missing, final_filename, max_workers)
+        total_exported += exported
+
+    print(f"\n{'=' * 60}")
+    print(f"All batches complete! Total sessions exported: {total_exported}")
+    print(f"{'=' * 60}")
+
+
+def export_teachings(catalog, audio_path, out_path, pass_missing=False,
+                     single_file='', batch_size=10, max_workers=10):
+    """Main export function with configurable batch size"""
     catalog, catalog_sessions = parse_catalog(catalog)
-    export_sessions(catalog_sessions, audio_path, out_path, pass_missing=pass_missing, single_file=single_file)
-
+    export_sessions(catalog_sessions, audio_path, out_path,
+                    pass_missing=pass_missing,
+                    single_file=single_file,
+                    final_filename=False,
+                    batch_size=batch_size,
+                    max_workers=max_workers)
 
 def export_final_files(catalog_path, mp3_path, srt_path, out):
     catalog = parse_catalog(catalog_path)
