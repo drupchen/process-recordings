@@ -86,6 +86,23 @@ def parse_catalog(catalog):
     return parsed, processed_in_sessions
 
 
+def check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
+    """Check if a session needs to be exported without loading audio"""
+    # Prepare output paths
+    if final_filename:
+        filename = s[0][1]['export filename']
+    else:
+        ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
+        filename = f'{audio_file}_{s_name}.{ext}'
+
+    out_file = out_path / filename
+    out_file = out_file.parent / audio_file[audio_file.rfind('/') + 1:] / (out_file.stem + ".wav")
+    out_file_m4a = out_file.with_suffix('.m4a')
+
+    # Return True if either file is missing
+    return not (out_file.is_file() and out_file_m4a.is_file())
+
+
 def load_audio_file(audio_path, folder, filename, pass_missing):
     """Load audio file with error handling"""
     af = audio_path / folder / filename
@@ -131,10 +148,6 @@ def export_single_session(task, audio_cache):
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file_m4a = out_file.with_suffix('.m4a')
 
-    # Skip if both exist
-    if out_file.is_file() and out_file_m4a.is_file():
-        return None  # Silent skip
-
     # Build session audio
     session_audio = AudioSegment.empty()
     for part_num, part in s:
@@ -165,12 +178,37 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
     print(f"Processing batch {batch_num}/{total_batches} ({len(batch_catalog)} audio files)")
     print(f"{'=' * 60}")
 
-    # Step 1: Load all audio files in this batch
-    audio_cache = {}
-    audio_info = {}
+    # Step 1: Check which files actually need processing
+    print("\nChecking which sessions need export...")
+    audio_files_needed = set()
+    pending_tasks = []
+    skipped_count = 0
 
-    # Collect audio file information
     for audio_file, sessions in batch_catalog.items():
+        needs_export = False
+
+        for s_name, s in sessions.items():
+            if check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
+                needs_export = True
+                pending_tasks.append((audio_file, s_name, s, out_path, final_filename))
+
+        if needs_export:
+            audio_files_needed.add(audio_file)
+        else:
+            skipped_count += 1
+
+    print(f"  - Files that need processing: {len(audio_files_needed)}")
+    print(f"  - Files already complete: {skipped_count}")
+    print(f"  - Sessions to export: {len(pending_tasks)}")
+
+    if not audio_files_needed:
+        print("\nAll files in this batch are already exported!")
+        return 0
+
+    # Step 2: Get audio file info only for files that need processing
+    audio_info = {}
+    for audio_file in audio_files_needed:
+        sessions = batch_catalog[audio_file]
         if '0' in sessions:
             folder = sessions['0'][0][1]['Folder']
             filename = sessions['0'][0][1]['filename']
@@ -181,8 +219,10 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
             continue
         audio_info[audio_file] = (folder, filename)
 
-    # Load audio files
-    print(f"\nLoading {len(audio_info)} audio files...")
+    # Step 3: Load only the audio files we need
+    audio_cache = {}
+    print(f"\nLoading {len(audio_info)} audio files that need processing...")
+
     for audio_file, (folder, filename) in audio_info.items():
         audio, error = load_audio_file(audio_path, folder, filename, pass_missing)
         if audio is not None:
@@ -191,24 +231,18 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
         elif error:
             print(f"  ✗ {error}")
 
-    # Step 2: Prepare all export tasks for this batch
-    export_tasks = []
-    for audio_file, sessions in batch_catalog.items():
-        if audio_file not in audio_cache:
-            continue
+    # Step 4: Process exports in parallel
+    if pending_tasks:
+        # Filter tasks to only include those with loaded audio
+        valid_tasks = [task for task in pending_tasks if task[0] in audio_cache]
 
-        for s_name, s in sessions.items():
-            export_tasks.append((audio_file, s_name, s, out_path, final_filename))
-
-    # Step 3: Process all exports in parallel
-    if export_tasks:
-        print(f"\nExporting {len(export_tasks)} sessions using {max_workers} workers...")
+        print(f"\nExporting {len(valid_tasks)} sessions using {max_workers} workers...")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             export_func = partial(export_single_session, audio_cache=audio_cache)
 
             # Submit all tasks
-            future_to_task = {executor.submit(export_func, task): task for task in export_tasks}
+            future_to_task = {executor.submit(export_func, task): task for task in valid_tasks}
 
             completed = 0
             successful = 0
@@ -216,7 +250,7 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
                 completed += 1
                 result = future.result()
                 if result and not result.startswith("Skipped"):
-                    print(f"  [{completed}/{len(export_tasks)}] {result}")
+                    print(f"  [{completed}/{len(valid_tasks)}] {result}")
                     if result.startswith("Exported"):
                         successful += 1
 
@@ -224,17 +258,43 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
 
     # Clear memory
     audio_cache.clear()
-    return len(export_tasks)
+    return len(valid_tasks) if 'valid_tasks' in locals() else 0
 
 
 def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_file='',
-                    final_filename=False, batch_size=10, max_workers=10):
-    """Export sessions processing files in batches"""
+                    final_filename=False, batch_size=10, max_workers=4):
+    """Export sessions processing files in batches with pre-checking"""
     out_path.mkdir(exist_ok=True, parents=True)
 
     # Filter catalog if single_file is specified
     if single_file:
         catalog = {k: v for k, v in catalog.items() if k == single_file}
+
+    # Quick scan to see how many files need processing
+    print("Performing initial scan to check which files need export...")
+    total_needs_export = 0
+    total_already_complete = 0
+
+    for audio_file, sessions in catalog.items():
+        needs_export = False
+        for s_name, s in sessions.items():
+            if check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
+                needs_export = True
+                break
+
+        if needs_export:
+            total_needs_export += 1
+        else:
+            total_already_complete += 1
+
+    print(f"\nInitial scan complete:")
+    print(f"  - Total audio files: {len(catalog)}")
+    print(f"  - Files needing export: {total_needs_export}")
+    print(f"  - Files already complete: {total_already_complete}")
+
+    if total_needs_export == 0:
+        print("\nAll files are already exported! Nothing to do.")
+        return
 
     # Split catalog into batches
     catalog_items = list(catalog.items())
@@ -244,10 +304,10 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
         batch = dict(catalog_items[i:i + batch_size])
         batches.append(batch)
 
-    print(f"Total audio files to process: {len(catalog)}")
-    print(f"Batch size: {batch_size}")
-    print(f"Number of batches: {len(batches)}")
-    print(f"Parallel workers per batch: {max_workers}")
+    print(f"\nProcessing configuration:")
+    print(f"  - Batch size: {batch_size}")
+    print(f"  - Number of batches: {len(batches)}")
+    print(f"  - Parallel workers per batch: {max_workers}")
 
     # Process each batch
     total_exported = 0
@@ -264,7 +324,7 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
 
 def export_teachings(catalog, audio_path, out_path, pass_missing=False,
                      single_file='', batch_size=10, max_workers=10):
-    """Main export function with configurable batch size"""
+    """Main export function with pre-checking and configurable batch size"""
     catalog, catalog_sessions = parse_catalog(catalog)
     export_sessions(catalog_sessions, audio_path, out_path,
                     pass_missing=pass_missing,
