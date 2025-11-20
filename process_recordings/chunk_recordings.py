@@ -9,6 +9,8 @@ from functools import partial
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 
+errors = []
+
 
 def parse_catalog(catalog):
     def to_milliseconds(tm):
@@ -153,6 +155,7 @@ def export_single_session(task, audio_cache):
     for part_num, part in s:
         start, duration = part['start'], part['duration']
         if not duration:
+            errors.append(f"Error: Missing timecodes for {out_file.name}")
             return f"Error: Missing timecodes for {out_file.name}"
         audio_part = audio[start:start + duration]
         session_audio += audio_part
@@ -167,6 +170,7 @@ def export_single_session(task, audio_cache):
                                  parameters=["-q:a", "2"])
         return f"Exported: {out_file.stem}"
     except Exception as e:
+        errors.append(f"Error exporting {out_file.name}: {str(e)}")
         return f"Error exporting {out_file.name}: {str(e)}"
 
 
@@ -230,6 +234,7 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
             print(f"  ✓ Loaded: {folder}/{filename}")
         elif error:
             print(f"  ✗ {error}")
+            errors.append(f"  ✗ {error}")
 
     # Step 4: Process exports in parallel
     if pending_tasks:
@@ -332,6 +337,11 @@ def export_teachings(catalog, audio_path, out_path, pass_missing=False,
                     final_filename=False,
                     batch_size=batch_size,
                     max_workers=max_workers)
+    print('-'*80)
+    print('Errors:')
+    for e in errors:
+        print(e)
+    print('-'*80)
 
 def export_final_files(catalog_path, mp3_path, srt_path, out):
     catalog = parse_catalog(catalog_path)

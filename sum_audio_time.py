@@ -111,16 +111,8 @@ def calculate_total_duration(folder_path, excluded_files, excluded_folders):
 def main():
     """Main function to run the script."""
 
-    folder_path = '/media/drupchen/Khyentse Önang/NAS/Original Files in Sessions'
+    folder_path = '/media/drupchen/Khyentse Önang/K-Ö Archives/Nyingthik Mapu Triyig Drime Shelung/m4a audio files'
     folders = [
-        'Desheg Kundu Ngondro',
-        'Gyalsey Lhaglen-France',
-        'Kyabje Dorjechang 3',
-        'Lojong Don Dunma',
-        'Semdon Rabsel Dronme',
-        'Tsasum Drildrup',
-        'Tsasum Osel Nyingthig-France',
-        'Khyentse Rinpoche-France-3'
     ]
     exclude_files = ['_orig.wav', '_trans.wav', '.wma', '.mp3']
     exclude_folders = ['AUDIO Khyentse Rinpoche WAV']

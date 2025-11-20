@@ -17,7 +17,7 @@ if mode == 1:
 
     audio_path = Path('/media/drupchen/Khyentse Önang/NAS/Original Files')
     out_path = Path('/media/drupchen/Khyentse Önang/NAS/Original Files in Sessions')
-    cassette_side_to_resegment = '111 A-Dzogchen Lamrim Yigdrupa'
+    cassette_side_to_resegment = 'AUDIO Khyentse Rinpoche WAV/176 A-Kyerim'  # folder required
     cassette_side_to_resegment = ''
     export_teachings(Path(filename), audio_path, out_path, pass_missing=True, single_file=cassette_side_to_resegment)
 
