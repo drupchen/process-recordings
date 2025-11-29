@@ -12,7 +12,7 @@ from pydub.exceptions import CouldntDecodeError
 errors = []
 
 
-def parse_catalog(catalog):
+def parse_catalog(catalog, renamed_export=False):
     def to_milliseconds(tm):
         millis = int((tm.hour * 3600) + (tm.minute * 60) + tm.second) * 1000 + (tm.microsecond / 1000)
         return millis
@@ -56,50 +56,74 @@ def parse_catalog(catalog):
 
         sessions = {}
         for p in parts:
-                # 1. parse main teaching
-                session, part = None, None
-                if ',' in p[S]:
-                    session, part = p[S].split(',')
-                else:
-                    session, part = p[S], '1'
+            # 1. parse main teaching
+            session, part = None, None
+            if ',' in p[S]:
+                session, part = p[S].split(',')
+            else:
+                session, part = p[S], '1'
 
-                if session:
-                    # create scaffolding
-                    if session not in sessions:
-                        sessions[session] = []
+            # filter all sessions that don't have session numbers
+            if session:
+                # create scaffolding
+                if session not in sessions:
+                    sessions[session] = []
 
-                    sessions[session].append((part, p))
+                sessions[session].append((part, p))
 
-                # 2. parse translation
-                session_trans, part_trans = None, None
-                if ',' in p[S_T]:
-                    session_trans, part_trans = p[S_T].split(',')
-                else:
-                    session_trans, part_trans = p[S_T], '1'
+            # 2. parse translation
+            session_trans, part_trans = None, None
+            if ',' in p[S_T]:
+                session_trans, part_trans = p[S_T].split(',')
+            else:
+                session_trans, part_trans = p[S_T], '1'
 
-                if session_trans:
-                    session_trans += '_trans'
-                    if session_trans not in sessions:
-                        sessions[session_trans] = []
+            # filter all sessions that don't have translation number
+            if session_trans:
+                session_trans += '_trans'
+                if session_trans not in sessions:
+                    sessions[session_trans] = []
 
-                    sessions[session_trans].append((part_trans, p))
+                sessions[session_trans].append((part_trans, p))
+
+            # add sessions that have renamed export names even if they have no numbers
+            if renamed_export and not p[S] and not p[S_T] and p['export filename']:
+                # create scaffolding
+                session = '1'
+                if session not in sessions:
+                    sessions[session] = []
+                sessions[session].append((session, p))
         processed_in_sessions[filename] = sessions
 
     return parsed, processed_in_sessions
 
 
+def gen_outpaths(audio_file, s_name, s, out_path, final_filename):
+    ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
+    if final_filename:
+        filename = f"{s[0][1]['export filename']}.{ext}"
+        status = s[0][1]['session export status']
+        status = status if status != 'Synchronized' else None
+        if status:
+            out_file = out_path / Path('In Progress') / Path(status) / Path(s[0][1]['export folder']) / filename
+            out_file_compressed = out_file.parent.parent.parent.parent / Path('mp3') / Path('In Progress') / Path(status) / out_file.parts[-2] / (out_file.stem + '.mp3')
+        else:
+
+            out_file = out_path / Path(s[0][1]['export folder']) / filename
+            out_file_compressed = out_file.parent.parent / Path('mp3') / out_file.parts[-2] / (out_file.stem + '.mp3')
+    else:
+        filename = f'{audio_file}_{s_name}.{ext}'
+        out_file = out_path / filename
+        out_file = out_file.parent / audio_file[audio_file.rfind('/') + 1:] / (out_file.stem + ".wav")
+        out_file_compressed = out_file.with_suffix('.m4a')
+
+    return out_file, out_file_compressed
+
+
 def check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
     """Check if a session needs to be exported without loading audio"""
     # Prepare output paths
-    if final_filename:
-        filename = s[0][1]['export filename']
-    else:
-        ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
-        filename = f'{audio_file}_{s_name}.{ext}'
-
-    out_file = out_path / filename
-    out_file = out_file.parent / audio_file[audio_file.rfind('/') + 1:] / (out_file.stem + ".wav")
-    out_file_m4a = out_file.with_suffix('.m4a')
+    out_file, out_file_m4a = gen_outpaths(audio_file, s_name, s, out_path, final_filename)
 
     # Return True if either file is missing
     return not (out_file.is_file() and out_file_m4a.is_file())
@@ -139,16 +163,7 @@ def export_single_session(task, audio_cache):
     audio = audio_cache[audio_file]
 
     # Prepare output paths
-    if final_filename:
-        filename = s[0][1]['export filename']
-    else:
-        ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
-        filename = f'{audio_file}_{s_name}.{ext}'
-
-    out_file = out_path / filename
-    out_file = out_file.parent / audio_file[audio_file.rfind('/') + 1:] / (out_file.stem + ".wav")
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    out_file_m4a = out_file.with_suffix('.m4a')
+    out_file, out_file_compressed = gen_outpaths(audio_file, s_name, s, out_path, final_filename)
 
     # Build session audio
     session_audio = AudioSegment.empty()
@@ -163,11 +178,16 @@ def export_single_session(task, audio_cache):
     # Export both formats
     try:
         if not out_file.is_file():
+            out_file.parent.mkdir(parents=True, exist_ok=True)
             session_audio.export(out_file, format="wav")
-        if not out_file_m4a.is_file():
-            session_audio.export(out_file_m4a, format="ipod",
-                                 bitrate="256k",
-                                 parameters=["-q:a", "2"])
+        if not out_file_compressed.is_file():
+            out_file_compressed.parent.mkdir(parents=True, exist_ok=True)
+            if 'm4a' in out_file_compressed.suffix:
+                session_audio.export(out_file_compressed, format="ipod",
+                                     bitrate="256k",
+                                     parameters=["-q:a", "2"])
+            elif 'mp3' in out_file_compressed.suffix:
+                session_audio.export(out_file_compressed, format="mp3")
         return f"Exported: {out_file.stem}"
     except Exception as e:
         errors.append(f"Error exporting {out_file.name}: {str(e)}")
@@ -326,6 +346,66 @@ def export_sessions(catalog, audio_path, out_path, pass_missing=False, single_fi
     print(f"All batches complete! Total sessions exported: {total_exported}")
     print(f"{'=' * 60}")
 
+def export_final_sessions(catalog, audio_path, out_path, pass_missing=False, single_file='',
+                    final_filename=False, batch_size=10, max_workers=4):
+    """Export sessions processing files in batches with pre-checking"""
+    out_path.mkdir(exist_ok=True, parents=True)
+
+    # Filter catalog if single_file is specified
+    if single_file:
+        catalog = {k: v for k, v in catalog.items() if k == single_file}
+
+    # Quick scan to see how many files need processing
+    print("Performing initial scan to check which files need export...")
+    total_needs_export = 0
+    total_already_complete = 0
+
+    for audio_file, sessions in catalog.items():
+        needs_export = False
+        for s_name, s in sessions.items():
+            if check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
+                needs_export = True
+                break
+
+        if needs_export:
+            total_needs_export += 1
+        else:
+            total_already_complete += 1
+
+    print(f"\nInitial scan complete:")
+    print(f"  - Total audio files: {len(catalog)}")
+    print(f"  - Files needing export: {total_needs_export}")
+    print(f"  - Files already complete: {total_already_complete}")
+
+    if total_needs_export == 0:
+        print("\nAll files are already exported! Nothing to do.")
+        return
+
+    # Split catalog into batches
+    catalog_items = list(catalog.items())
+    batches = []
+
+    for i in range(0, len(catalog_items), batch_size):
+        batch = dict(catalog_items[i:i + batch_size])
+        batches.append(batch)
+
+    print(f"\nProcessing configuration:")
+    print(f"  - Batch size: {batch_size}")
+    print(f"  - Number of batches: {len(batches)}")
+    print(f"  - Parallel workers per batch: {max_workers}")
+
+    # Process each batch
+    total_exported = 0
+    for batch_num, batch in enumerate(batches, 1):
+        batch_info = (batch, batch_num, len(batches))
+        exported = process_batch(batch_info, audio_path, out_path,
+                                 pass_missing, final_filename, max_workers)
+        total_exported += exported
+
+    print(f"\n{'=' * 60}")
+    print(f"All batches complete! Total sessions exported: {total_exported}")
+    print(f"{'=' * 60}")
+
 
 def export_teachings(catalog, audio_path, out_path, pass_missing=False,
                      single_file='', batch_size=10, max_workers=10):
@@ -335,6 +415,22 @@ def export_teachings(catalog, audio_path, out_path, pass_missing=False,
                     pass_missing=pass_missing,
                     single_file=single_file,
                     final_filename=False,
+                    batch_size=batch_size,
+                    max_workers=max_workers)
+    print('-'*80)
+    print('Errors:')
+    for e in errors:
+        print(e)
+    print('-'*80)
+
+def export_renamed_sessions(catalog, audio_path, out_path, pass_missing=False,
+                     single_file='', batch_size=10, max_workers=10):
+    """export final sessions processing files in batches with pre-checking"""
+    catalog, catalog_sessions = parse_catalog(catalog, renamed_export=True)
+    export_final_sessions(catalog_sessions, audio_path, out_path,
+                    pass_missing=pass_missing,
+                    single_file=single_file,
+                    final_filename=True,
                     batch_size=batch_size,
                     max_workers=max_workers)
     print('-'*80)

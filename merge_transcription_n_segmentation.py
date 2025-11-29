@@ -52,7 +52,7 @@ def main():
     mode = 1
     if mode == 1:
         # File paths - modify these according to your file locations
-        in_path = Path('/media/drupchen/Khyentse Önang/K-Ö Archives/jangchub zhunglam')
+        in_path = Path('/media/drupchen/Khyentse Önang/K-Ö Archives/Pure Appearance')
         for f in in_path.rglob('*.srt'):
             print(f.name)
             txt = f.parent / (f.stem + '.txt')
