@@ -87,7 +87,7 @@ def parse_catalog(catalog, renamed_export=False):
                 sessions[session_trans].append((part_trans, p))
 
             # add sessions that have renamed export names even if they have no numbers
-            if renamed_export and not p[S] and not p[S_T] and p['export filename']:
+            if renamed_export and not p[S] and not p[S_T] and p['export filename'].strip():
                 # create scaffolding
                 session = '1'
                 if session not in sessions:
