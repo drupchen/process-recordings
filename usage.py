@@ -7,13 +7,13 @@ from process_recordings.chunk_recordings import export_renamed_sessions
 # modes:
 # 1. Segmentation process: export individual sessions from the cassette sides + resegment sessions when needed
 # 2. same as above, but for restored audio
-# 3. export individual renamed sessions in corresponding folders
+# 3. export individual renamed sessions in New Archives
 # 4. Alignment process: when everything is aligned, export final sessions + .srt files for hyperaudio with final filenames + tibetan session title
 mode = 3
 
 if mode == 1:
     # download from Google Drive
-    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5UhciIy-L82-xPJJ5TmpNS-Hizae9ot_2fuvbl2cPQvuBwwRYfpYSSQkeSletINUeaq3UILKlP0gA/pub?gid=2043758745&single=true&output=tsv'
+    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=2035952658&single=true&output=tsv'
     filename = "input/audio $archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
@@ -25,7 +25,7 @@ if mode == 1:
 
 if mode == 2:
     # download from Google Drive
-    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5UhciIy-L82-xPJJ5TmpNS-Hizae9ot_2fuvbl2cPQvuBwwRYfpYSSQkeSletINUeaq3UILKlP0gA/pub?gid=2043758745&single=true&output=tsv'
+    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=2035952658&single=true&output=tsv'
     filename = "input/audio $archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
@@ -37,13 +37,13 @@ if mode == 2:
 
 if mode == 3:
     # download from Google Drive
-    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5UhciIy-L82-xPJJ5TmpNS-Hizae9ot_2fuvbl2cPQvuBwwRYfpYSSQkeSletINUeaq3UILKlP0gA/pub?gid=2043758745&single=true&output=tsv'
+    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=2035952658&single=true&output=tsv'
     # test catalog
-    #catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5UhciIy-L82-xPJJ5TmpNS-Hizae9ot_2fuvbl2cPQvuBwwRYfpYSSQkeSletINUeaq3UILKlP0gA/pub?gid=1920094530&single=true&output=tsv'
+    #catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=1444985196&single=true&output=tsv'
     filename = "input/audio $archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
-    audio_path = Path('/media/drupchen/Khyentse Önang/NAS/Test')
+    audio_path = Path('/media/drupchen/Khyentse Önang/NAS/Original Files')
     out_path = Path('/media/drupchen/Khyentse Önang/NAS/New Archives')
     cassette_side_to_resegment = 'AUDIO Khyentse Rinpoche WAV/176 A-Kyerim'  # folder required
     cassette_side_to_resegment = ''

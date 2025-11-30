@@ -48,6 +48,7 @@ def parse_catalog(catalog, renamed_export=False):
         return False
 
     processed_in_sessions = {}
+    renamed_num = 0
     S, S_T = 'session number', 'translation session number'
     for filename, parts in parsed.items():
         # filter out all unprocessed files
@@ -87,11 +88,15 @@ def parse_catalog(catalog, renamed_export=False):
                 sessions[session_trans].append((part_trans, p))
 
             # add sessions that have renamed export names even if they have no numbers
-            if renamed_export and not p[S] and not p[S_T] and p['export filename'].strip():
+            if renamed_export and not p[S] and p['export filename'].strip():
+                # generate new session name so that the session is not appended to an existing one
+                renamed_num += 1
+                session = f'a{renamed_num}'
+                p[S] = session
                 # create scaffolding
-                session = '1'
                 if session not in sessions:
                     sessions[session] = []
+
                 sessions[session].append((session, p))
         processed_in_sessions[filename] = sessions
 
@@ -179,6 +184,8 @@ def export_single_session(task, audio_cache):
     try:
         if not out_file.is_file():
             out_file.parent.mkdir(parents=True, exist_ok=True)
+            if out_file.suffix == '.mp3':
+                out_file = out_file.with_suffix('.wav')
             session_audio.export(out_file, format="wav")
         if not out_file_compressed.is_file():
             out_file_compressed.parent.mkdir(parents=True, exist_ok=True)
@@ -236,12 +243,20 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
         if '0' in sessions:
             folder = sessions['0'][0][1]['Folder']
             filename = sessions['0'][0][1]['filename']
+            audio_info[audio_file] = (folder, filename)
         elif '1' in sessions:
             folder = sessions['1'][0][1]['Folder']
             filename = sessions['1'][0][1]['filename']
+            audio_info[audio_file] = (folder, filename)
+        elif final_filename:
+            for s_num, session in sessions.items():
+                for s in session:
+                    folder = s[1]['Folder']
+                    filename = s[1]['filename']
+                    audio_info[audio_file] = (folder, filename)
         else:
             continue
-        audio_info[audio_file] = (folder, filename)
+
 
     # Step 3: Load only the audio files we need
     audio_cache = {}
@@ -423,10 +438,26 @@ def export_teachings(catalog, audio_path, out_path, pass_missing=False,
         print(e)
     print('-'*80)
 
+
+def keep_sessions_with_export_name(catalog_sessions):
+    to_keep = {}
+    for audio_file, sessions in catalog_sessions.items():
+        for session_num, parts in sessions.items():
+            export_name = parts[0][1]['export filename']
+            if export_name.strip():  # only keep parts with export names
+                # create data structure
+                if audio_file not in to_keep:
+                    to_keep[audio_file] = {}
+                # add session
+                to_keep[audio_file][session_num] = parts
+    return to_keep
+
+
 def export_renamed_sessions(catalog, audio_path, out_path, pass_missing=False,
                      single_file='', batch_size=10, max_workers=10):
     """export final sessions processing files in batches with pre-checking"""
     catalog, catalog_sessions = parse_catalog(catalog, renamed_export=True)
+    catalog_sessions = keep_sessions_with_export_name(catalog_sessions)
     export_final_sessions(catalog_sessions, audio_path, out_path,
                     pass_missing=pass_missing,
                     single_file=single_file,
