@@ -180,7 +180,10 @@ def export_single_session(task, audio_cache):
     session_audio = AudioSegment.empty()
     for part_num, part in s:
         start, duration = part['start'], part['duration']
-        if not duration:
+        if not duration and final_filename:
+            session_audio += audio
+            break
+        elif not duration:
             errors.append(f"Error: Missing timecodes for {out_file.name}")
             return f"Error: Missing timecodes for {out_file.name}"
         audio_part = audio[start:start + duration]
