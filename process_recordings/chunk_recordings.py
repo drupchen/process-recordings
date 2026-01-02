@@ -39,11 +39,13 @@ def parse_catalog(catalog, renamed_export=False):
             parsed[file].append(row)
 
     # group in teaching sessions
-    def is_processed(parts):
+    def is_processed(parts, renamed_export=False):
         for p in parts:
             if p[S]:
                 return True
             if p[S_T]:
+                return True
+            if renamed_export and p['export filename']:
                 return True
         return False
 
@@ -52,7 +54,7 @@ def parse_catalog(catalog, renamed_export=False):
     S, S_T = 'session number', 'translation session number'
     for filename, parts in parsed.items():
         # filter out all unprocessed files
-        if not is_processed(parts):
+        if not is_processed(parts, renamed_export):
             continue
 
         sessions = {}
@@ -105,17 +107,18 @@ def parse_catalog(catalog, renamed_export=False):
 
 def gen_outpaths(audio_file, s_name, s, out_path, final_filename):
     ext = s[0][1]['filename'][s[0][1]['filename'].rfind('.') + 1:]
+    if "ཧྥ་རན་སི" in str(final_filename):
+        print()
     if final_filename:
         filename = f"{s[0][1]['export filename']}.{ext}"
         status = s[0][1]['session export status']
         status = status if status != 'Synchronized' else None
-        if status:
-            out_file = out_path / Path('In Progress') / Path(status) / Path(s[0][1]['export folder']) / filename
-            out_file_compressed = out_file.parent.parent.parent.parent / Path('mp3') / Path('In Progress') / Path(status) / out_file.parts[-2] / (out_file.stem + '.mp3')
+        if status and status != 'No Text' and status != 'Others':
+            out_file = out_path / 'WAV' / Path('In Progress') / Path(status) / Path(s[0][1]['export folder']) / filename
+            out_file_compressed = out_path / 'MP3' / Path('In Progress') / Path(status) / Path(s[0][1]['export folder']) / (out_file.stem + '.mp3')
         else:
-
-            out_file = out_path / Path(s[0][1]['export folder']) / filename
-            out_file_compressed = out_file.parent.parent / Path('mp3') / out_file.parts[-2] / (out_file.stem + '.mp3')
+            out_file = out_path / 'WAV' / Path(s[0][1]['export folder']) / filename
+            out_file_compressed = out_path / 'MP3' / Path(s[0][1]['export folder']) / (out_file.stem + '.mp3')
     else:
         filename = f'{audio_file}_{s_name}.{ext}'
         out_file = out_path / filename
@@ -125,13 +128,16 @@ def gen_outpaths(audio_file, s_name, s, out_path, final_filename):
     return out_file, out_file_compressed
 
 
-def check_session_needs_export(audio_file, s_name, s, out_path, final_filename):
+def check_session_needs_export(audio_file, s_name, s, out_path, final_filename, debug=False):
     """Check if a session needs to be exported without loading audio"""
     # Prepare output paths
-    out_file, out_file_m4a = gen_outpaths(audio_file, s_name, s, out_path, final_filename)
+    out_file, out_file_compressed = gen_outpaths(audio_file, s_name, s, out_path, final_filename)
+    if debug:
+        print(len(str(out_file)), out_file)
+        print(len(str(out_file)), out_file_compressed)
 
     # Return True if either file is missing
-    return not (out_file.is_file() and out_file_m4a.is_file())
+    return not (out_file.is_file() and out_file_compressed.is_file())
 
 
 def load_audio_file(audio_path, folder, filename, pass_missing):
@@ -195,7 +201,7 @@ def export_single_session(task, audio_cache):
                                      parameters=["-q:a", "2"])
             elif 'mp3' in out_file_compressed.suffix:
                 session_audio.export(out_file_compressed, format="mp3")
-        return f"Exported: {out_file.stem}"
+        return f"Exported: {out_file.stem}\n\t{out_file}\n\t{out_file_compressed}"
     except Exception as e:
         errors.append(f"Error exporting {out_file.name}: {str(e)}")
         return f"Error exporting {out_file.name}: {str(e)}"
@@ -205,12 +211,13 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
     """Process a batch of audio files"""
     batch_catalog, batch_num, total_batches = batch_info
 
-    print(f"\n{'=' * 60}")
-    print(f"Processing batch {batch_num}/{total_batches} ({len(batch_catalog)} audio files)")
-    print(f"{'=' * 60}")
+    report = []
+    report.append(f"\n{'=' * 60}")
+    report.append(f"Processing batch {batch_num}/{total_batches} ({len(batch_catalog)} audio files)")
+    report.append(f"{'=' * 60}")
 
     # Step 1: Check which files actually need processing
-    print("\nChecking which sessions need export...")
+    report.append("\nChecking which sessions need export...")
     audio_files_needed = set()
     pending_tasks = []
     skipped_count = 0
@@ -228,13 +235,16 @@ def process_batch(batch_info, audio_path, out_path, pass_missing, final_filename
         else:
             skipped_count += 1
 
-    print(f"  - Files that need processing: {len(audio_files_needed)}")
-    print(f"  - Files already complete: {skipped_count}")
-    print(f"  - Sessions to export: {len(pending_tasks)}")
+    report.append(f"  - Files that need processing: {len(audio_files_needed)}")
+    report.append(f"  - Files already complete: {skipped_count}")
+    report.append(f"  - Sessions to export: {len(pending_tasks)}")
 
     if not audio_files_needed:
-        print("\nAll files in this batch are already exported!")
+        #print("\nAll files in this batch are already exported!")
         return 0
+
+    for r in report:
+        print(r)
 
     # Step 2: Get audio file info only for files that need processing
     audio_info = {}
@@ -451,6 +461,15 @@ def keep_sessions_with_export_name(catalog_sessions):
                 # add session
                 to_keep[audio_file][session_num] = parts
     return to_keep
+
+def find_renamed_sessions_dupes(catalog):
+    parsed = defaultdict(int)
+    with open(catalog, newline='') as csvfile:
+        cat = csv.DictReader(csvfile, delimiter='\t', quotechar='|')
+        for row in cat:
+            renamed_session = f"{row['export folder']}/{row['export filename']}"
+            parsed[renamed_session] += 1
+    return parsed
 
 
 def export_renamed_sessions(catalog, audio_path, out_path, pass_missing=False,
