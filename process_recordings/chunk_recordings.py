@@ -8,6 +8,7 @@ from functools import partial
 
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
+from soundfile import LibsndfileError
 
 errors = []
 
@@ -158,7 +159,10 @@ def load_audio_file(audio_path, folder, filename, pass_missing):
         new_af = af.parent / (af.stem + '_pcm16' + af.suffix)
         if not new_af.is_file():
             import soundfile as sf
-            data, samplerate = sf.read(af)
+            try:
+                data, samplerate = sf.read(af)
+            except LibsndfileError as e:
+                exit(e)
             sf.write(new_af, data, samplerate, format='wav', subtype='PCM_16')
         audio = AudioSegment.from_file(new_af)
         return audio, None
