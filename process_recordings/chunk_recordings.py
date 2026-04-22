@@ -10,6 +10,16 @@ from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 from soundfile import LibsndfileError
 
+_COPYRIGHT = "Copyright © Shechen Archives. All Rights Reserved."
+_PROJECT_NAME = "Khyentse Önang"
+_DESCRIPTION = "Preserved by the Khyentse Önang Project. Original media from Shechen Archives."
+
+_METADATA_TAGS = {
+    "copyright": _COPYRIGHT,
+    "album": _PROJECT_NAME,
+    "comment": _DESCRIPTION,
+}
+
 errors = []
 
 
@@ -23,6 +33,8 @@ def parse_catalog(catalog, renamed_export=False):
     with open(catalog, newline='') as csvfile:
         cat = csv.DictReader(csvfile, delimiter='\t', quotechar='|')
         for row in cat:
+            if '.' not in row['filename']:
+                continue
             file = row['filename'][:row['filename'].rfind('.')]
             file = f"{row['Folder']}/{file}"
             if row['start']:
@@ -199,15 +211,16 @@ def export_single_session(task, audio_cache):
             out_file.parent.mkdir(parents=True, exist_ok=True)
             if out_file.suffix == '.mp3':
                 out_file = out_file.with_suffix('.wav')
-            session_audio.export(out_file, format="wav")
+            session_audio.export(out_file, format="wav", tags=_METADATA_TAGS, parameters=[])
         if not out_file_compressed.is_file():
             out_file_compressed.parent.mkdir(parents=True, exist_ok=True)
             if 'm4a' in out_file_compressed.suffix:
                 session_audio.export(out_file_compressed, format="ipod",
                                      bitrate="256k",
-                                     parameters=["-q:a", "2"])
+                                     parameters=["-q:a", "2"],
+                                     tags=_METADATA_TAGS)
             elif 'mp3' in out_file_compressed.suffix:
-                session_audio.export(out_file_compressed, format="mp3")
+                session_audio.export(out_file_compressed, format="mp3", tags=_METADATA_TAGS)
         return f"Exported: {out_file.stem}\n\t{out_file}\n\t{out_file_compressed}"
     except Exception as e:
         errors.append(f"Error exporting {out_file.name}: {str(e)}")

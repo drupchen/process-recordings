@@ -49,7 +49,7 @@ def replace_srt_content(srt_file_path, txt_file_path, output_file_path):
 
 
 def main():
-    mode = 1
+    mode = 2
     if mode == 1:
         # File paths - modify these according to your file locations
         in_path = Path('/media/drupchen/Khyentse Önang/K-Ö Archives/Pure Appearance')
@@ -60,10 +60,10 @@ def main():
             replace_srt_content(f, txt, output_file_path)
             print()
     if mode == 2:
-        in_path = Path('/media/drupchen/Khyentse Önang/K-Ö Archives/Initial Dilkhyen Transcriptions/Thokthabarsum')
-        srt_file_path = in_path / "113 A-Dzogchen Lamrin Yeshey Drupa_improved.srt"
-        txt_file_path = in_path / "113 A-Dzogchen Lamrin Yeshey Drupa.txt"
-        output_file_path = srt_file_path
+        in_path = Path('/media/drupchen/Khyentse Önang/Public Talks/079 A-Kyabje Dilgo Khyentse Rinpoche-Public teaching/1')
+        srt_file_path = in_path / "079 A-Kyabje Dilgo Khyentse Rinpoche-Public teaching_1a.srt"
+        txt_file_path = in_path / "079 A-Kyabje Dilgo Khyentse Rinpoche-Public teaching_1a_fr.txt"
+        output_file_path = in_path / "079 A-Kyabje Dilgo Khyentse Rinpoche-Public teaching_1a_fr.srt"
 
         replace_srt_content(srt_file_path, txt_file_path, output_file_path)
 

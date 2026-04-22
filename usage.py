@@ -8,8 +8,8 @@ from process_recordings.chunk_recordings import export_renamed_sessions
 # 1. Segmentation process: export individual sessions from the cassette sides + resegment sessions when needed
 # 2. same as above, but for restored audio
 # 3. export individual renamed sessions in New Archives
-# 4. Alignment process: when everything is aligned, export final sessions + .srt files for hyperaudio with final filenames + tibetan session title
-mode = 3
+# 4. same as above, but for restored audio
+mode = 4
 
 if mode == 1:
     # download from Google Drive
@@ -49,14 +49,17 @@ if mode == 3:
     cassette_side_to_resegment = ''
     export_renamed_sessions(Path(filename), audio_path, out_path, pass_missing=True, single_file=cassette_side_to_resegment)
 
-elif mode == 4:
+if mode == 4:
     # download from Google Drive
-    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGZJWL9nTtAurpNBs3AVK7UHELhEW41I3t1u9NZHU8xDxPKHTz9Qml1W_jVJ4vpyQzZxDDLv6Q2pq2/pub?gid=708229619&single=true&output=tsv'
-    filename = "input/tsiksum nedek catalog - final catalog.tsv"
-    filename = ''
+    catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=2035952658&single=true&output=tsv'
+    # test catalog
+    #catalog_url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGcAAMyJQYeR91n_9JF84BUpuMdHu4sxXBIrkLhEHCPe_F_rD_8YK9y6pzmCPK1adBPEQWzQ9Aynn4/pub?gid=1444985196&single=true&output=tsv'
+    filename = "input/audio $archives - sessions.tsv"
     urlretrieve(catalog_url, filename)
 
-    mp3_path = 'output/tsiksum nedek/'
-    srt_path = '/home/drupchen/Documents/Dilkhyen Transcriptions/TSIG SUM/Sessions/SRT'
-    out_path = '/home/drupchen/Documents/Dilkhyen Transcriptions/TSIG SUM/Sessions/Final'
-    export_final_files(Path(filename), mp3_path=mp3_path, srt_path=srt_path, out=out_path)
+    audio_path = Path('/media/drupchen/Khyentse Önang/NAS/Cleaned by Thubten')
+    out_path = Path('/media/drupchen/Khyentse Önang/NAS/New Archives_Restored')
+    cassette_side_to_resegment = 'AUDIO Khyentse Rinpoche WAV/176 A-Kyerim'  # folder required
+    cassette_side_to_resegment = ''
+    export_renamed_sessions(Path(filename), audio_path, out_path, pass_missing=True, single_file=cassette_side_to_resegment)
+
